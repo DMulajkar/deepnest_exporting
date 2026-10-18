@@ -29,6 +29,7 @@ import { NavigationService, createNavigationService } from "./components/navigat
 import { PartsViewService, createPartsViewService } from "./components/parts-view.js";
 import { NestViewService, createNestViewService } from "./components/nest-view.js";
 import { SheetDialogService, createSheetDialogService } from "./components/sheet-dialog.js";
+import { createToolpathAnimator } from "./components/toolpath-animator.js";
 
 // Utility imports
 import { message } from "./utils/ui-helpers.js";
@@ -113,6 +114,7 @@ let navigationService: NavigationService;
 let partsViewService: PartsViewService;
 let nestViewService: NestViewService;
 let sheetDialogService: SheetDialogService;
+const toolpathAnimator = createToolpathAnimator();
 
 /**
  * Electron and Node.js module references
@@ -764,6 +766,27 @@ function initializeExportButtons(): void {
   if (exportPdfBtn) {
     exportPdfBtn.onclick = () => {
       exportService.exportToPdf();
+      return false;
+    };
+  }
+
+  // G-code export
+  const exportGcodeBtn = getElement<HTMLElement>("#exportgcode");
+  if (exportGcodeBtn) {
+    exportGcodeBtn.onclick = () => {
+      exportService.exportToGcode();
+      return false;
+    };
+  }
+
+  // Toolpath preview
+  const previewToolpathBtn = getElement<HTMLElement>("#previewtoolpath");
+  if (previewToolpathBtn) {
+    previewToolpathBtn.onclick = () => {
+      const data = exportService.collectExportPaths("the toolpath preview");
+      if (data) {
+        toolpathAnimator.open(data);
+      }
       return false;
     };
   }

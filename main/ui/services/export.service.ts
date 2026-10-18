@@ -16,6 +16,7 @@ import { message } from "../utils/ui-helpers.js";
 import { generateHpgl } from "../utils/hpgl.js";
 import type { HpglPath } from "../utils/hpgl.js";
 import { generatePdf } from "../utils/pdf.js";
+import { generateGcode } from "../utils/gcode.js";
 
 /**
  * File filter options for the save dialog
@@ -131,7 +132,7 @@ export interface ExportOptions {
 /**
  * Export file formats
  */
-export type ExportFormat = "svg" | "dxf" | "json" | "plt" | "pdf";
+export type ExportFormat = "svg" | "dxf" | "json" | "plt" | "pdf" | "gcode";
 
 /**
  * File filters for export dialogs
@@ -150,6 +151,10 @@ const PLT_FILE_FILTERS: FileFilter[] = [
 
 const PDF_FILE_FILTERS: FileFilter[] = [
   { name: "PDF", extensions: ["pdf"] }
+];
+
+const GCODE_FILE_FILTERS: FileFilter[] = [
+  { name: "G-code", extensions: ["gcode", "nc", "ngc"] }
 ];
 
 const JSON_FILE_FILTERS: FileFilter[] = [
@@ -549,23 +554,12 @@ export class ExportService {
       fileName = fileName + ".plt";
     }
 
-    const selected = this.getSelectedNest();
-    if (!selected) {
+    const flat = this.collectExportPaths("PLT");
+    if (!flat) {
       return false;
     }
 
-    const svg = this.buildSvgExport(selected);
-    const inchesPerUnit = this.getInchesPerSvgUnit(svg);
-    if (inchesPerUnit === null) {
-      message("Could not determine the export size for PLT", true);
-      return false;
-    }
-
-    this.svgParser.applyTransform(svg);
-    this.svgParser.flatten(svg);
-
-    const paths = this.collectHpglPaths(svg, inchesPerUnit);
-    this.fs.writeFileSync(fileName, generateHpgl(paths));
+    this.fs.writeFileSync(fileName, generateHpgl(flat.paths));
 
     return true;
   }
@@ -595,16 +589,70 @@ export class ExportService {
       fileName = fileName + ".pdf";
     }
 
-    const selected = this.getSelectedNest();
-    if (!selected) {
+    const flat = this.collectExportPaths("PDF");
+    if (!flat) {
       return false;
+    }
+
+    this.fs.writeFileSync(fileName, generatePdf(flat.paths, flat.widthInches, flat.heightInches));
+
+    return true;
+  }
+
+  /**
+   * Show save dialog and export to G-code (mm, absolute), generated locally from the export SVG
+   * Uses the default laser on/off commands (M3/M5) and a 1000 mm/min feed rate
+   * @returns True if export was successful
+   */
+  exportToGcode(): boolean {
+    if (!this.dialog || !this.fs || !this.svgParser) {
+      message("Export dependencies not available", true);
+      return false;
+    }
+
+    let fileName = this.dialog.showSaveDialogSync({
+      title: "Export deepnest G-code",
+      filters: GCODE_FILE_FILTERS,
+    });
+
+    if (fileName === undefined) {
+      return false;
+    }
+
+    // Ensure a G-code extension
+    if (!/\.(gcode|nc|ngc)$/i.test(fileName)) {
+      fileName = fileName + ".gcode";
+    }
+
+    const flat = this.collectExportPaths("G-code");
+    if (!flat) {
+      return false;
+    }
+
+    this.fs.writeFileSync(fileName, generateGcode(flat.paths));
+
+    return true;
+  }
+
+  /**
+   * Build the selected nest as flattened paths in inches, y pointing up, plus the page size
+   * Shared by the PLT, PDF and G-code exports and the toolpath preview
+   * @param label - Format name used in the error message
+   * @returns Paths and size, or null if there is no selected nest or the size is unusable
+   */
+  collectExportPaths(
+    label: string
+  ): { paths: HpglPath[]; widthInches: number; heightInches: number } | null {
+    const selected = this.getSelectedNest();
+    if (!selected || !this.svgParser) {
+      return null;
     }
 
     const svg = this.buildSvgExport(selected);
     const inchesPerUnit = this.getInchesPerSvgUnit(svg);
     if (inchesPerUnit === null) {
-      message("Could not determine the export size for PDF", true);
-      return false;
+      message(`Could not determine the export size for ${label}`, true);
+      return null;
     }
 
     const [, , viewBoxWidth, viewBoxHeight] = (svg.getAttribute("viewBox") || "")
@@ -614,13 +662,11 @@ export class ExportService {
     this.svgParser.applyTransform(svg);
     this.svgParser.flatten(svg);
 
-    const paths = this.collectHpglPaths(svg, inchesPerUnit);
-    this.fs.writeFileSync(
-      fileName,
-      generatePdf(paths, viewBoxWidth * inchesPerUnit, viewBoxHeight * inchesPerUnit)
-    );
-
-    return true;
+    return {
+      paths: this.collectHpglPaths(svg, inchesPerUnit),
+      widthInches: viewBoxWidth * inchesPerUnit,
+      heightInches: viewBoxHeight * inchesPerUnit,
+    };
   }
 
   /**
@@ -916,6 +962,8 @@ export class ExportService {
           return this.exportToPlt();
         case "pdf":
           return this.exportToPdf();
+        case "gcode":
+          return this.exportToGcode();
         default:
           message(`Unsupported export format: ${format}`, true);
           return false;
@@ -946,7 +994,7 @@ export class ExportService {
    * @returns Array of supported format strings
    */
   static getSupportedFormats(): ExportFormat[] {
-    return ["svg", "dxf", "json", "plt", "pdf"];
+    return ["svg", "dxf", "json", "plt", "pdf", "gcode"];
   }
 
   /**
@@ -964,6 +1012,8 @@ export class ExportService {
         return [...PLT_FILE_FILTERS];
       case "pdf":
         return [...PDF_FILE_FILTERS];
+      case "gcode":
+        return [...GCODE_FILE_FILTERS];
       default:
         return [];
     }

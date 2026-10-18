@@ -372,7 +372,7 @@ h3 {
 
 #export_wrapper.active:hover ul.dropdown {
   opacity: 1;
-  height: 8em;
+  height: 11em;
 }
 
 ul.dropdown {
@@ -1836,4 +1836,96 @@ body.dark-mode #presetName {
 /* Prevent interaction while modal is shown */
 .modal-open {
   overflow: hidden;
+}
+
+/* Toolpath animator */
+.toolpath-overlay {
+  --toolpath-cut: #24c7ed;
+  --toolpath-hot: #ff7a3d;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(ellipse at center, #1c1f26 0%, #0b0c10 100%);
+  color: #e6e6e6;
+}
+
+.toolpath-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5em;
+  padding: 0.8em 1.2em;
+}
+
+.toolpath-title {
+  font-weight: bold;
+  letter-spacing: 0.05em;
+}
+
+.toolpath-legend {
+  flex: 1;
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+.toolpath-key {
+  display: inline-block;
+  width: 1.6em;
+  height: 0;
+  margin: 0 0.4em 0.25em 1em;
+  border-top: 2px solid var(--toolpath-cut);
+}
+
+.toolpath-key:first-child {
+  margin-left: 0;
+}
+
+.toolpath-key-rapid {
+  border-top: 2px dashed rgba(255, 255, 255, 0.5);
+}
+
+.toolpath-close {
+  font-size: 2em;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.toolpath-close:hover {
+  opacity: 1;
+}
+
+.toolpath-canvas {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+.toolpath-controls {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  padding: 0.8em 1.2em 1.2em;
+}
+
+.toolpath-controls .button {
+  margin: 0;
+}
+
+.toolpath-scrub {
+  flex: 1;
+}
+
+.toolpath-label {
+  min-width: 3em;
+  text-align: right;
+}
+
+.toolpath-speed {
+  background: #2d2d2d;
+  color: #e6e6e6;
+  border: 1px solid #505050;
+  border-radius: 3px;
+  padding: 0.3em 0.5em;
 }

@@ -15,6 +15,7 @@ import { DEFAULT_CONVERSION_SERVER } from "../types/index.js";
 import { message } from "../utils/ui-helpers.js";
 import { generateHpgl } from "../utils/hpgl.js";
 import type { HpglPath } from "../utils/hpgl.js";
+import { generatePdf } from "../utils/pdf.js";
 
 /**
  * File filter options for the save dialog
@@ -130,7 +131,7 @@ export interface ExportOptions {
 /**
  * Export file formats
  */
-export type ExportFormat = "svg" | "dxf" | "json" | "plt";
+export type ExportFormat = "svg" | "dxf" | "json" | "plt" | "pdf";
 
 /**
  * File filters for export dialogs
@@ -145,6 +146,10 @@ const DXF_FILE_FILTERS: FileFilter[] = [
 
 const PLT_FILE_FILTERS: FileFilter[] = [
   { name: "PLT (HPGL)", extensions: ["plt"] }
+];
+
+const PDF_FILE_FILTERS: FileFilter[] = [
+  { name: "PDF", extensions: ["pdf"] }
 ];
 
 const JSON_FILE_FILTERS: FileFilter[] = [
@@ -566,6 +571,59 @@ export class ExportService {
   }
 
   /**
+   * Show save dialog and export to a single-page vector PDF, generated locally from the export SVG
+   * The page is sized to the nest at its real physical size
+   * @returns True if export was successful
+   */
+  exportToPdf(): boolean {
+    if (!this.dialog || !this.fs || !this.svgParser) {
+      message("Export dependencies not available", true);
+      return false;
+    }
+
+    let fileName = this.dialog.showSaveDialogSync({
+      title: "Export deepnest PDF",
+      filters: PDF_FILE_FILTERS,
+    });
+
+    if (fileName === undefined) {
+      return false;
+    }
+
+    // Ensure .pdf extension
+    if (!fileName.toLowerCase().endsWith(".pdf")) {
+      fileName = fileName + ".pdf";
+    }
+
+    const selected = this.getSelectedNest();
+    if (!selected) {
+      return false;
+    }
+
+    const svg = this.buildSvgExport(selected);
+    const inchesPerUnit = this.getInchesPerSvgUnit(svg);
+    if (inchesPerUnit === null) {
+      message("Could not determine the export size for PDF", true);
+      return false;
+    }
+
+    const [, , viewBoxWidth, viewBoxHeight] = (svg.getAttribute("viewBox") || "")
+      .split(/[\s,]+/)
+      .map(Number);
+
+    this.svgParser.applyTransform(svg);
+    this.svgParser.flatten(svg);
+
+    const paths = this.collectHpglPaths(svg, inchesPerUnit);
+    this.fs.writeFileSync(
+      fileName,
+      generatePdf(paths, viewBoxWidth * inchesPerUnit, viewBoxHeight * inchesPerUnit)
+    );
+
+    return true;
+  }
+
+  /**
    * Get the physical size of one SVG user unit in inches
    * applyDimensions sets width as a number plus "mm" or "in", and viewBox "0 0 w h"
    * @param svg - Export SVG element
@@ -856,6 +914,8 @@ export class ExportService {
           return this.exportToJson();
         case "plt":
           return this.exportToPlt();
+        case "pdf":
+          return this.exportToPdf();
         default:
           message(`Unsupported export format: ${format}`, true);
           return false;
@@ -886,7 +946,7 @@ export class ExportService {
    * @returns Array of supported format strings
    */
   static getSupportedFormats(): ExportFormat[] {
-    return ["svg", "dxf", "json", "plt"];
+    return ["svg", "dxf", "json", "plt", "pdf"];
   }
 
   /**
@@ -902,6 +962,8 @@ export class ExportService {
         return [...DXF_FILE_FILTERS];
       case "plt":
         return [...PLT_FILE_FILTERS];
+      case "pdf":
+        return [...PDF_FILE_FILTERS];
       default:
         return [];
     }

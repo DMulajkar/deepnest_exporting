@@ -758,6 +758,15 @@ function initializeExportButtons(): void {
       return false;
     };
   }
+
+  // PDF export
+  const exportPdfBtn = getElement<HTMLElement>("#exportpdf");
+  if (exportPdfBtn) {
+    exportPdfBtn.onclick = () => {
+      exportService.exportToPdf();
+      return false;
+    };
+  }
 }
 
 /**

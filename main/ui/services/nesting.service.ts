@@ -63,6 +63,7 @@ const SELECTORS = {
   NEST_DISPLAY: "#nestdisplay",
   EXPORT_WRAPPER: "#export_wrapper",
   EXPORT_BUTTON: "#export",
+  PREVIEW_BUTTON: "#previewtoolpath",
   STOP_BUTTON: "#stopnest",
   START_BUTTON: "#startnest",
   BACK_BUTTON: "#back",
@@ -78,6 +79,8 @@ const BUTTON_CLASSES = {
   START: "button start",
   EXPORT: "button export",
   EXPORT_DISABLED: "button export disabled",
+  PREVIEW: "button preview",
+  PREVIEW_DISABLED: "button preview disabled",
 } as const;
 
 /**
@@ -323,6 +326,11 @@ export class NestingService {
     if (exportButton) {
       exportButton.className = BUTTON_CLASSES.EXPORT;
     }
+
+    const previewButton = document.querySelector(SELECTORS.PREVIEW_BUTTON);
+    if (previewButton) {
+      previewButton.className = BUTTON_CLASSES.PREVIEW;
+    }
   }
 
   /**
@@ -337,6 +345,11 @@ export class NestingService {
     }
     if (exportButton) {
       exportButton.className = BUTTON_CLASSES.EXPORT_DISABLED;
+    }
+
+    const previewButton = document.querySelector(SELECTORS.PREVIEW_BUTTON);
+    if (previewButton) {
+      previewButton.className = BUTTON_CLASSES.PREVIEW_DISABLED;
     }
   }
 

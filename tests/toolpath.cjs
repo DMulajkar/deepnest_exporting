@@ -40,6 +40,11 @@ assert.equal(segmentIndexAt(tp, 0), 0);
 assert.equal(segmentIndexAt(tp, 1), 1);
 assert.equal(segmentIndexAt(tp, 999), 4);
 
+// custom origin: first rapid starts there, and y can point down
+const o = buildToolpath([{ points: [{ x: 5, y: 5 }, { x: 5, y: 6 }], closed: false }], 4, { x: 5, y: 9 });
+assert.deepEqual([o.segments[0].x0, o.segments[0].y0, o.segments[0].cut], [5, 9, false]);
+assert.equal(o.duration, 1 + 4 / 4);
+
 // custom rapid speed
 assert.equal(buildToolpath([{ points: [{ x: 1, y: 0 }, { x: 2, y: 0 }], closed: false }], 1).duration, 2);
 

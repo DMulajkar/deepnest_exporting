@@ -783,9 +783,9 @@ function initializeExportButtons(): void {
   const previewToolpathBtn = getElement<HTMLElement>("#previewtoolpath");
   if (previewToolpathBtn) {
     previewToolpathBtn.onclick = () => {
-      const data = exportService.collectExportPaths("the toolpath preview");
+      const data = exportService.getToolpathData();
       if (data) {
-        toolpathAnimator.open(data);
+        toolpathAnimator.open(data.paths, data.origin);
       }
       return false;
     };

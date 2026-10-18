@@ -1,8 +1,11 @@
 /**
  * Toolpath Animator
- * Full-window overlay that replays the laser/tool moves of a nest on a canvas:
- * a glowing dot follows the path, cuts light up behind it, rapids show as dashes.
+ * Replays the laser/tool moves of a nest on a transparent canvas laid over the
+ * nest display pane, so the real nest drawing (dimmed) stays underneath: cuts
+ * light up behind a glowing dot, rapids show as dashes.
  * Move order and timing come from utils/toolpath.ts (same order as the G-code export).
+ *
+ * Paths are in the coordinates of the nest display SVG (#nestsvg), y pointing down.
  */
 
 import type { HpglPath } from "../utils/hpgl.js";
@@ -17,13 +20,6 @@ const TRAIL_FRACTION = 0.01;
 
 const SPEEDS = [0.5, 1, 2, 4, 8];
 
-export interface ToolpathData {
-  /** Paths in inches, y pointing up */
-  paths: HpglPath[];
-  widthInches: number;
-  heightInches: number;
-}
-
 export class ToolpathAnimator {
   private overlay: HTMLDivElement | null = null;
   private canvas!: HTMLCanvasElement;
@@ -33,8 +29,6 @@ export class ToolpathAnimator {
   private speedSelect!: HTMLSelectElement;
 
   private toolpath: Toolpath = { segments: [], duration: 0 };
-  private widthInches = 1;
-  private heightInches = 1;
 
   /** Current position on the toolpath's time axis */
   private t = 0;
@@ -55,21 +49,21 @@ export class ToolpathAnimator {
   private readonly onResize = (): void => this.draw();
 
   /**
-   * Open the overlay and start playing
-   * @param data - Paths in inches (y up) and the page size
+   * Open the preview over the nest pane and start playing
+   * @param paths - Paths in nest display SVG units, y pointing down
+   * @param origin - Where the tool starts, in the same units
    */
-  open(data: ToolpathData): void {
+  open(paths: HpglPath[], origin: { x: number; y: number }): void {
     this.close();
 
-    this.toolpath = buildToolpath(data.paths);
-    this.widthInches = data.widthInches;
-    this.heightInches = data.heightInches;
+    this.toolpath = buildToolpath(paths, 4, origin);
     this.t = 0;
     this.speed = 1;
 
     this.build();
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("resize", this.onResize);
+    document.querySelector("#nestdisplay")?.addEventListener("scroll", this.onResize);
     this.draw();
     this.play();
   }
@@ -78,6 +72,7 @@ export class ToolpathAnimator {
     this.pause();
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("resize", this.onResize);
+    document.querySelector("#nestdisplay")?.removeEventListener("scroll", this.onResize);
     this.overlay?.remove();
     this.overlay = null;
   }
@@ -86,14 +81,6 @@ export class ToolpathAnimator {
     const overlay = document.createElement("div");
     overlay.className = "toolpath-overlay";
     overlay.innerHTML = `
-      <div class="toolpath-header">
-        <span class="toolpath-title">Laser path preview</span>
-        <span class="toolpath-legend">
-          <i class="toolpath-key toolpath-key-cut"></i>cut
-          <i class="toolpath-key toolpath-key-rapid"></i>travel
-        </span>
-        <span class="toolpath-close" title="Close (Esc)">&times;</span>
-      </div>
       <canvas class="toolpath-canvas"></canvas>
       <div class="toolpath-controls">
         <button class="button toolpath-play">Pause</button>
@@ -103,6 +90,7 @@ export class ToolpathAnimator {
         <select class="toolpath-speed">
           ${SPEEDS.map((s) => `<option value="${s}"${s === 1 ? " selected" : ""}>${s}x</option>`).join("")}
         </select>
+        <button class="button toolpath-close">Close</button>
       </div>`;
 
     this.canvas = overlay.querySelector(".toolpath-canvas") as HTMLCanvasElement;
@@ -126,7 +114,8 @@ export class ToolpathAnimator {
       this.speed = Number(this.speedSelect.value);
     };
 
-    document.body.appendChild(overlay);
+    // Mount inside the nest page so it covers only the nest display pane
+    (document.querySelector("#nest") ?? document.body).appendChild(overlay);
     this.overlay = overlay;
   }
 
@@ -174,7 +163,8 @@ export class ToolpathAnimator {
   };
 
   private draw(): void {
-    if (!this.overlay) {
+    const nestSvg = document.querySelector<SVGSVGElement>("#nestsvg");
+    if (!this.overlay || !nestSvg) {
       return;
     }
 
@@ -193,16 +183,16 @@ export class ToolpathAnimator {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cssW, cssH);
 
-    // Fit the page into the canvas with a margin, y flipped so the design is upright
-    const margin = 24;
-    const scale = Math.min(
-      (cssW - 2 * margin) / this.widthInches,
-      (cssH - 2 * margin) / this.heightInches
-    );
-    const offX = (cssW - this.widthInches * scale) / 2;
-    const offY = (cssH + this.heightInches * scale) / 2;
-    const sx = (x: number): number => offX + x * scale;
-    const sy = (y: number): number => offY - y * scale;
+    // Line the canvas up with the nest display SVG: same origin, same scale
+    const canvasRect = this.canvas.getBoundingClientRect();
+    const svgRect = nestSvg.getBoundingClientRect();
+    const viewBox = nestSvg.viewBox.baseVal;
+    if (!(viewBox.width > 0)) {
+      return;
+    }
+    const scale = svgRect.width / viewBox.width;
+    const sx = (x: number): number => svgRect.left - canvasRect.left + (x - viewBox.x) * scale;
+    const sy = (y: number): number => svgRect.top - canvasRect.top + (y - viewBox.y) * scale;
 
     const { segments, duration } = this.toolpath;
     const active = segmentIndexAt(this.toolpath, this.t);
@@ -210,26 +200,13 @@ export class ToolpathAnimator {
     const cutColor = style.getPropertyValue("--toolpath-cut").trim() || "#24c7ed";
     const hotColor = style.getPropertyValue("--toolpath-hot").trim() || "#ff7a3d";
 
-    // Page outline
-    ctx.strokeStyle = "rgba(255,255,255,0.12)";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(sx(0), sy(this.heightInches), this.widthInches * scale, this.heightInches * scale);
-
-    // Whole toolpath, dim: cuts solid, rapids dashed
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.strokeStyle = "rgba(255,255,255,0.18)";
-    ctx.beginPath();
-    segments.forEach((s) => {
-      if (s.cut) {
-        ctx.moveTo(sx(s.x0), sy(s.y0));
-        ctx.lineTo(sx(s.x1), sy(s.y1));
-      }
-    });
-    ctx.stroke();
 
+    // Travel moves, dashed
     ctx.setLineDash([3, 5]);
-    ctx.strokeStyle = "rgba(255,255,255,0.1)";
+    ctx.strokeStyle = "rgba(255,255,255,0.15)";
+    ctx.lineWidth = 1;
     ctx.beginPath();
     segments.forEach((s) => {
       if (!s.cut) {
@@ -281,7 +258,7 @@ export class ToolpathAnimator {
       // Travel move in progress
       if (!cur.cut) {
         ctx.setLineDash([3, 5]);
-        ctx.strokeStyle = "rgba(255,255,255,0.45)";
+        ctx.strokeStyle = "rgba(255,255,255,0.5)";
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(sx(cur.x0), sy(cur.y0));
@@ -293,12 +270,13 @@ export class ToolpathAnimator {
 
     // The laser: soft glow plus bright core
     const cutting = active >= 0 && segments[active].cut && this.t < duration;
-    const glow = ctx.createRadialGradient(sx(pos.x), sy(pos.y), 0, sx(pos.x), sy(pos.y), cutting ? 18 : 12);
+    const radius = cutting ? 18 : 12;
+    const glow = ctx.createRadialGradient(sx(pos.x), sy(pos.y), 0, sx(pos.x), sy(pos.y), radius);
     glow.addColorStop(0, cutting ? "rgba(255,160,100,0.95)" : "rgba(255,255,255,0.7)");
     glow.addColorStop(1, "rgba(255,122,61,0)");
     ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.arc(sx(pos.x), sy(pos.y), cutting ? 18 : 12, 0, Math.PI * 2);
+    ctx.arc(sx(pos.x), sy(pos.y), radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = "#fff";
     ctx.beginPath();

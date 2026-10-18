@@ -5,7 +5,7 @@
  * functions with no DOM or Electron dependencies so they can be tested on their own.
  *
  * The move order matches generateGcode: paths in order, closed paths return to
- * their start, and the first rapid starts from the machine origin (0,0).
+ * their start, and the first rapid starts from the machine origin (0,0 by default).
  */
 
 import type { HpglPath } from "./hpgl.js";
@@ -29,14 +29,19 @@ export interface Toolpath {
 }
 
 /**
- * @param paths - Paths in any consistent length unit, y pointing up
+ * @param paths - Paths in any consistent length unit and orientation
  * @param rapidSpeed - How many times faster rapids are than cutting (default: 4)
+ * @param origin - Where the tool starts (default: 0,0)
  */
-export function buildToolpath(paths: HpglPath[], rapidSpeed = 4): Toolpath {
+export function buildToolpath(
+  paths: HpglPath[],
+  rapidSpeed = 4,
+  origin: { x: number; y: number } = { x: 0, y: 0 }
+): Toolpath {
   const segments: ToolSegment[] = [];
   let t = 0;
-  let x = 0;
-  let y = 0;
+  let x = origin.x;
+  let y = origin.y;
 
   const move = (x1: number, y1: number, cut: boolean): void => {
     const length = Math.hypot(x1 - x, y1 - y);

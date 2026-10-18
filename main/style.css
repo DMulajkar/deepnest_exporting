@@ -314,6 +314,14 @@ h3 {
   padding-left: 4em;
 }
 
+.button.preview {
+  background-image: url(img/start.svg);
+  background-repeat: no-repeat;
+  background-size: 1.6em 1.6em;
+  background-position: 2.25em 50%;
+  padding-left: 4.625em;
+}
+
 .button.code {
   background: #fff url(img/code.svg) no-repeat;
   background-size: 1.2em 1.2em;
@@ -360,7 +368,8 @@ h3 {
 #export_wrapper {
   position: relative;
   display: inline-block;
-  margin: 0.78em 0 0 1.25em;
+  /* same margin as .button (0.78em / 1.25em) but resolved at the button's 0.875em font size, so Export lines up with the other buttons */
+  margin: calc(0.78em * 0.875) 0 0 calc(1.25em * 0.875);
 }
 
 #export {
@@ -372,7 +381,7 @@ h3 {
 
 #export_wrapper.active:hover ul.dropdown {
   opacity: 1;
-  height: 11em;
+  height: 9.5em;
 }
 
 ul.dropdown {
@@ -1838,79 +1847,51 @@ body.dark-mode #presetName {
   overflow: hidden;
 }
 
-/* Toolpath animator */
+/* Toolpath animator: transparent layer over the nest display pane, real nest dimmed underneath */
 .toolpath-overlay {
   --toolpath-cut: #24c7ed;
   --toolpath-hot: #ff7a3d;
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  background: radial-gradient(ellipse at center, #1c1f26 0%, #0b0c10 100%);
-  color: #e6e6e6;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 75%;
+  height: calc(100% - 2 * (var(--nav-width) - 0.625em));
+  z-index: 5;
+  pointer-events: none; /* wheel and scroll still reach the nest display below */
 }
 
-.toolpath-header {
-  display: flex;
-  align-items: center;
-  gap: 1.5em;
-  padding: 0.8em 1.2em;
+#nest:has(.toolpath-overlay) #nestdisplay svg {
+  opacity: 0.35;
 }
 
-.toolpath-title {
-  font-weight: bold;
-  letter-spacing: 0.05em;
-}
-
-.toolpath-legend {
-  flex: 1;
-  font-size: 0.85em;
-  opacity: 0.8;
-}
-
-.toolpath-key {
-  display: inline-block;
-  width: 1.6em;
-  height: 0;
-  margin: 0 0.4em 0.25em 1em;
-  border-top: 2px solid var(--toolpath-cut);
-}
-
-.toolpath-key:first-child {
-  margin-left: 0;
-}
-
-.toolpath-key-rapid {
-  border-top: 2px dashed rgba(255, 255, 255, 0.5);
-}
-
-.toolpath-close {
-  font-size: 2em;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0.7;
-}
-
-.toolpath-close:hover {
-  opacity: 1;
-}
-
+/* Bleeds 40px past the pane so the laser glow at the sheet's edges (x=0 / y=0 sit on the pane edge) is not clipped */
 .toolpath-canvas {
-  flex: 1;
-  width: 100%;
-  min-height: 0;
+  position: absolute;
+  inset: -40px;
+  width: calc(100% + 80px);
+  height: calc(100% + 80px);
 }
 
 .toolpath-controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   align-items: center;
   gap: 1em;
-  padding: 0.8em 1.2em 1.2em;
+  padding: 0.6em 1.2em 1em;
+  background: linear-gradient(to top, rgba(26, 26, 26, 0.95), rgba(26, 26, 26, 0));
+  color: #ccc;
+  pointer-events: auto;
 }
 
 .toolpath-controls .button {
   margin: 0;
+  padding: 0.6em 1.6em;
+  /* these are <button> elements, .button is styled for <li>: drop the browser default border and font */
+  border: none;
+  font-family: inherit;
 }
 
 .toolpath-scrub {

@@ -640,9 +640,13 @@ export class ExportService {
    * @param label - Format name used in the error message
    * @returns Paths and size, or null if there is no selected nest or the size is unusable
    */
-  collectExportPaths(
-    label: string
-  ): { paths: HpglPath[]; widthInches: number; heightInches: number } | null {
+  collectExportPaths(label: string): {
+    paths: HpglPath[];
+    widthInches: number;
+    heightInches: number;
+    inchesPerUnit: number;
+    unitsHeight: number;
+  } | null {
     const selected = this.getSelectedNest();
     if (!selected || !this.svgParser) {
       return null;
@@ -666,7 +670,56 @@ export class ExportService {
       paths: this.collectHpglPaths(svg, inchesPerUnit),
       widthInches: viewBoxWidth * inchesPerUnit,
       heightInches: viewBoxHeight * inchesPerUnit,
+      inchesPerUnit,
+      unitsHeight: viewBoxHeight,
     };
+  }
+
+  /**
+   * Build the selected nest's toolpath in the coordinates of the nest display SVG (y pointing down)
+   * so the preview can be drawn exactly over it. The display stacks sheets 1.1x their height apart
+   * while the export stacks them edge to edge (plus the configured gap), so each path is shifted
+   * from its export sheet position to its display sheet position.
+   * @returns Paths and the machine origin in display units, or null if nothing can be built
+   */
+  getToolpathData(): { paths: HpglPath[]; origin: { x: number; y: number } } | null {
+    const flat = this.collectExportPaths("the toolpath preview");
+    const selected = this.getSelectedNest();
+    if (!flat || !selected || !this.deepNest || !this.config) {
+      return null;
+    }
+
+    const exportWithSheetsSpace = !!this.config.getSync("exportWithSheetsSpace");
+    const sheetSpace = Number(this.config.getSync("exportWithSheetsSpaceValue")) || 0;
+    const sheets = selected.placements as SheetGroup[];
+
+    let exportTop = 0;
+    let displayTop = 0;
+    const bands = sheets.map((s, i) => {
+      const height = this.deepNest!.parts[s.sheet].bounds.height;
+      const band = { exportTop, displayTop, height };
+      exportTop += height + (exportWithSheetsSpace && i < sheets.length - 1 ? sheetSpace : 0);
+      displayTop += 1.1 * height;
+      return band;
+    });
+
+    const paths = flat.paths.map((path) => {
+      // Back to export SVG units, y pointing down
+      const points = path.points.map((p) => ({
+        x: p.x / flat.inchesPerUnit,
+        y: flat.unitsHeight - p.y / flat.inchesPerUnit,
+      }));
+
+      // Each path lies within one sheet; pick it by the path's mean y
+      const meanY = points.reduce((sum, p) => sum + p.y, 0) / (points.length || 1);
+      const band = [...bands].reverse().find((b) => b.exportTop <= meanY) ?? bands[0];
+      const shift = band ? band.displayTop - band.exportTop : 0;
+
+      return { closed: path.closed, points: points.map((p) => ({ x: p.x, y: p.y + shift })) };
+    });
+
+    const last = bands[bands.length - 1];
+    return { paths, origin: { x: 0, y: last ? last.displayTop + last.height : 0 } };
   }
 
   /**

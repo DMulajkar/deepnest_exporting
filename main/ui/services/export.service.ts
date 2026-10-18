@@ -17,6 +17,7 @@ import { generateHpgl } from "../utils/hpgl.js";
 import type { HpglPath } from "../utils/hpgl.js";
 import { generatePdf } from "../utils/pdf.js";
 import { generateGcode } from "../utils/gcode.js";
+import { optimizePathOrder } from "../utils/path-order.js";
 
 /**
  * File filter options for the save dialog
@@ -636,7 +637,7 @@ export class ExportService {
 
   /**
    * Build the selected nest as flattened paths in inches, y pointing up, plus the page size
-   * Shared by the PLT, PDF and G-code exports and the toolpath preview
+   * Shared by the PLT, PDF and G-code exports and the toolpath preview, so all of them cut in the same optimized order
    * @param label - Format name used in the error message
    * @returns Paths and size, or null if there is no selected nest or the size is unusable
    */
@@ -667,7 +668,8 @@ export class ExportService {
     this.svgParser.flatten(svg);
 
     return {
-      paths: this.collectHpglPaths(svg, inchesPerUnit),
+      // Reordered for the shortest tool travel from the machine origin (0,0), holes before outlines
+      paths: optimizePathOrder(this.collectHpglPaths(svg, inchesPerUnit)),
       widthInches: viewBoxWidth * inchesPerUnit,
       heightInches: viewBoxHeight * inchesPerUnit,
       inchesPerUnit,
